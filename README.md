@@ -1,10 +1,10 @@
 # class-transformer
 
-[![Build Status](https://travis-ci.org/pleerock/class-transformer.svg?branch=master)](https://travis-ci.org/pleerock/class-transformer)
-[![codecov](https://codecov.io/gh/pleerock/class-transformer/branch/master/graph/badge.svg)](https://codecov.io/gh/pleerock/class-transformer)
+[![Build Status](https://travis-ci.org/typestack/class-transformer.svg?branch=master)](https://travis-ci.org/typestack/class-transformer)
+[![codecov](https://codecov.io/gh/typestack/class-transformer/branch/master/graph/badge.svg)](https://codecov.io/gh/typestack/class-transformer)
 [![npm version](https://badge.fury.io/js/class-transformer.svg)](https://badge.fury.io/js/class-transformer)
-[![Dependency Status](https://david-dm.org/pleerock/class-transformer.svg)](https://david-dm.org/pleerock/class-transformer)
-[![Join the chat at https://gitter.im/pleerock/class-transformer](https://badges.gitter.im/pleerock/class-transformer.svg)](https://gitter.im/pleerock/class-transformer?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Dependency Status](https://david-dm.org/typestack/class-transformer.svg)](https://david-dm.org/typestack/class-transformer)
+[![Join the chat at https://gitter.im/typestack/class-transformer](https://badges.gitter.im/typestack/class-transformer.svg)](https://gitter.im/typestack/class-transformer?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 Its ES6 and Typescript era. Nowadays you are working with classes and constructor objects more then ever.
 Class-transformer allows you to transform plain object to some instance of class and versa.
@@ -102,7 +102,7 @@ Here is example how it will look like:
 
 ```typescript
 fetch("users.json").then((users: Object[]) => {
-    const realUsers = plainToClass(users);
+    const realUsers = plainToClass(User, users);
     // now each user in realUsers is instance of User class 
 });
 ```
@@ -186,6 +186,17 @@ import {plainToClass} from "class-transformer";
 let users = plainToClass(User, userJson); // to convert user plain object a single user. also supports arrays
 ```
 
+#### plainToClassFromExist
+
+This method transforms a plain object into a instance using a already filled Object which is a instance from the target class.
+
+```typescript
+const defaultUser = new User();
+defaultUser.role = 'user';
+
+let mixedUser = plainToClassFromExist(defaultUser, user); // mixed user should have the value role = user when no value is set otherwise.
+```
+
 #### classToPlain
 
 This method transforms your class object back to plain javascript object, that can be `JSON.stringify` later.
@@ -224,14 +235,14 @@ You can deserialize your model to from a json using `deserialize` method:
 
 ```typescript
 import {deserialize} from "class-transformer";
-let photo = deserialize(photo);
+let photo = deserialize(Photo, photo);
 ```
 
 To make deserialization to work with arrays use `deserializeArray` method:
 
 ```typescript
 import {deserializeArray} from "class-transformer";
-let photos = deserializeArray(photos);
+let photos = deserializeArray(Photo, photos);
 ```
 
 ## Working with nested objects
@@ -266,6 +277,78 @@ export class Photo {
 let album = plainToClass(Album, albumJson);
 // now album is Album object with Photo objects inside
 ```
+
+### Providing more than one type option
+
+In case the nested object can be of different types, you can provide an additional options object,
+that specifies a discriminator. The discriminator option must define a `property` that holds the sub
+type name for the object and the possible `subTypes`, the nested object can converted to. A sub type
+has a `value`, that holds the constructor of the Type and the `name`, that can match with the `property`
+of the discriminator.
+
+Lets say we have an album that has a top photo. But this photo can be of certain different types.
+And we are trying to convert album plain object to class object. The plain object input has to define
+the additional property `__type`. This property is removed during transformation by default:
+
+**JSON input**:
+```json
+{
+    "id": 1,
+    "name": "foo",
+    "topPhoto": {
+        "id": 9,
+        "filename": "cool_wale.jpg",
+        "depth": 1245,
+        "__type": "underwater"
+    }
+}
+```
+
+```typescript
+import {Type, plainToClass} from "class-transformer";
+
+export abstract class Photo {
+    id: number;
+    filename: string;
+}
+
+export class Landscape extends Photo {
+    panorama: boolean;
+}
+
+export class Portrait extends Photo {
+    person: Person;
+}
+
+export class UnderWater extends Photo {
+    depth: number;
+}
+
+export class Album {
+
+    id: number;
+    name: string;
+
+    @Type(() => Photo, {
+        discriminator: {
+            property: "__type",
+            subTypes: [
+                { value: Landscape, name: "landscape" },
+                { value: Portrait, name: "portrait" },
+                { value: UnderWater, name: "underwater" }
+            ]
+        }
+    })
+    topPhoto: Landscape | Portrait | UnderWater;
+
+}
+
+let album = plainToClass(Album, albumJson);
+// now album is Album object with a UnderWater object without `__type` property.
+```
+
+Hint: The same applies for arrays with different sub types. Moreover you can specify `keepDiscriminatorProperty: true`
+in the options to keep the discriminator property also inside your resulting class.
 
 ## Exposing getters and method return values
 
@@ -530,7 +613,7 @@ When you are using arrays you must provide a type of the object that array conta
 This type, you specify in a `@Type()` decorator:
 
 ```typescript
-import {ArrayType} from "class-transformer";
+import {Type} from "class-transformer";
 
 export class Photo {
 
@@ -546,7 +629,7 @@ export class Photo {
 You can also use custom array types:
 
 ```typescript
-import {ArrayType} from "class-transformer";
+import {Type} from "class-transformer";
 
 export class AlbumCollection extends Array<Album> {
     // custom array functions ...
@@ -564,6 +647,29 @@ export class Photo {
 ```
 
 Library will handle proper transformation automatically.
+
+ES6 collections `Set` and `Map` also require the `@Type` decorator:
+
+```typescript
+export class Skill {
+    name: string;
+}
+
+export class Weapon {
+    name: string;
+    range: number;
+}
+
+export class Player {
+    name: string;
+
+    @Type(() => Skill)
+    skills: Set<Skill>;
+
+    @Type(() => Weapon)
+    weapons: Map<string, Weapon>;
+}
+```
 
 ## Additional data transformation
 
@@ -611,6 +717,7 @@ The `@Transform` decorator is given more arguments to let you configure how you 
 |--------------------|------------------------------------------|---------------------------------------------|
 | `@TransformClassToPlain` | `@TransformClassToPlain({ groups: ["user"] })` | Transform the method return with classToPlain and expose the properties on the class.
 | `@TransformClassToClass` | `@TransformClassToClass({ groups: ["user"] })` | Transform the method return with classToClass and expose the properties on the class.
+| `@TransformPlainToClass` | `@TransformPlainToClass(User, { groups: ["user"] })` | Transform the method return with plainToClass and expose the properties on the class.
 
 The above decorators accept one optional argument:
 ClassTransformOptions - The transform options like groups, version, name
@@ -658,7 +765,7 @@ the exposed variables. email property is also exposed becuase we metioned the gr
 ## Working with generics
 
 Generics are not supported because TypeScript does not have good reflection abilities yet.
-Once TypeScript team provide us better runtime type reelection tools, generics will be implemented.
+Once TypeScript team provide us better runtime type reflection tools, generics will be implemented.
 There are some tweaks however you can use, that maybe can solve your problem.
 [Checkout this example.](https://github.com/pleerock/class-transformer/tree/master/sample/sample4-generics)
 
